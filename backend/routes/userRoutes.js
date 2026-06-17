@@ -3,13 +3,14 @@ const router = express.Router();
 const db = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { verifyToken } = require('../middleware/authMiddleware'); // <--- Kita taruh di atas dengan rapi
+const { verifyToken, authorizeRole } = require('../middleware/authMiddleware');
+const { validateAuth } = require('../middleware/validationMiddleware');
 
-// ==================== 1. REGISTRASI (Mendukung Multi-role) ====================
-router.post('/register', async (req, res) => {
-    const { username, email, password, roles } = req.body; 
+// ==================== 1. REGISTRASI (Aman & Multi-role) ====================
+router.post('/register', validateAuth, async (req, res) => {
+    const { username, email, password, roles } = req.body;
 
-    if (!username || !email || !password || !roles || !Array.isArray(roles)) {
+    if (!roles || !Array.isArray(roles) || roles.length === 0) {
         return res.status(400).json({ message: 'Data tidak valid! Kolom roles harus berupa array.' });
     }
 
@@ -47,13 +48,9 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// ==================== 2. LOGIN (Mengambil Semua Role User) ====================
+// ==================== 2. LOGIN ====================
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Email dan password wajib diisi!' });
-    }
 
     try {
         const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -62,7 +59,6 @@ router.post('/login', async (req, res) => {
         }
 
         const user = userResult.rows[0];
-        
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
             return res.status(401).json({ message: 'Email atau password salah!' });
@@ -96,7 +92,6 @@ router.post('/login', async (req, res) => {
                 role_names: userRoleNames
             }
         });
-
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
@@ -116,29 +111,31 @@ router.get('/profile', verifyToken, async (req, res) => {
         }
 
         const user = userResult.rows[0];
-
         const rolesResult = await db.query(
-            `SELECT r.role_name 
-             FROM user_roles ur
-             JOIN roles r ON ur.role_id = r.id
-             WHERE ur.user_id = $1`,
+            `SELECT r.role_name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = $1`,
             [user.id]
         );
         
-        const userRoleNames = rolesResult.rows.map(row => row.role_name);
-
         res.status(200).json({
             message: 'Profil user berhasil diambil!',
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                roles: userRoleNames
-            }
+            user: { ...user, roles: rolesResult.rows.map(row => row.role_name) }
         });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
+    }
+});
+
+router.post('/logout', (req, res) => {
+    res.status(200).json({ message: 'Logout berhasil. Silakan hapus token di sisi klien.' });
+});
+
+router.get('/admin/users', verifyToken, authorizeRole([1]), async (req, res) => {
+    try {
+        const users = await db.query('SELECT id, username, email FROM users');
+        res.status(200).json(users.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Gagal mengambil data user.' });
     }
 });
 

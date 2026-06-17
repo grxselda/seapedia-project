@@ -1,0 +1,26 @@
+# SEAPEDIA Backend API Documentation
+
+Selamat datang di dokumentasi resmi Backend SEAPEDIA. Dokumentasi ini mencakup aturan bisnis, sistem keamanan, dan panduan pengujian.
+
+## 1. Panduan Menjalankan (Testing Guide)
+1. Pastikan PostgreSQL sudah berjalan.
+2. Jalankan `npm install` untuk menginstal dependensi.
+3. Konfigurasi file `.env` (DB_HOST, JWT_SECRET, DB_USER, DB_PASSWORD, DB_NAME).
+4. Masukkan data awal (Seed Data): `node seeds/seed.js`
+5. Jalankan server: `node server.js`
+
+## 2. Dokumentasi Aturan Bisnis
+- **Checkout:** Mendukung *single-store* dengan perhitungan PPN dan aturan diskon.
+- **Pendapatan Driver:** Diakumulasikan berdasarkan `delivery_fee` dari setiap pekerjaan selesai.
+- **SLA Logistik:** Pesanan yang melampaui batas waktu proses (SLA) akan dibatalkan otomatis melalui endpoint `/api/orders/sla/simulate-cancel`.
+- **Refund & Stok:** Pembatalan otomatis memicu pengembalian dana ke *Wallet* pembeli dan pengembalian stok barang secara transaksional (menggunakan `BEGIN/COMMIT`).
+
+## 3. Keamanan (Security)
+API ini telah diperkuat dengan standar industri:
+- **SQL Injection Prevention:** Menggunakan *Parameterized Queries* (`$1, $2, ...`) di semua transaksi database.
+- **XSS Prevention:** Input user dibersihkan menggunakan `express-validator` (`escape()`).
+- **Input Validation:** Middleware `validateAuth`, `validateProduct`, dll., memastikan integritas data (format email, harga positif, stok non-negatif).
+- **RBAC (Role-Based Access Control):** Penggunaan middleware `authorizeRole([role_ids])` untuk membatasi akses endpoint (Admin-only, Driver-only, dsb).
+
+## 4. Simulasi Waktu
+Untuk pengujian pembatalan otomatis (SLA), gunakan endpoint `POST /api/orders/sla/simulate-cancel` dengan token JWT yang valid. Sistem akan memeriksa pesanan dengan status 'Sedang Dikemas' yang berumur lebih dari batas yang ditentukan.

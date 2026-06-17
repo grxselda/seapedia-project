@@ -10,17 +10,20 @@ const verifyToken = (req, res, next) => {
 
     try {
         const verified = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = verified; // Menyimpan data id dan roles dari token ke objek 'req.user'
+        req.user = verified; // Menyimpan data {id, roles} dari token ke objek req.user
         next();
     } catch (error) {
         return res.status(401).json({ message: 'Token tidak valid atau sudah kedaluwarsa.' });
     }
 };
 
-const checkRole = (allowedRoles) => {
+const authorizeRole = (allowedRoles) => {
     return (req, res, next) => {
-        const userRoles = req.user.roles; 
+        if (!req.user || !req.user.roles) {
+            return res.status(403).json({ message: 'Data role pengguna tidak ditemukan.' });
+        }
 
+        const userRoles = req.user.roles; 
         const hasPermission = userRoles.some(role => allowedRoles.includes(role));
 
         if (!hasPermission) {
@@ -33,4 +36,4 @@ const checkRole = (allowedRoles) => {
     };
 };
 
-module.exports = { verifyToken, checkRole };
+module.exports = { verifyToken, authorizeRole };

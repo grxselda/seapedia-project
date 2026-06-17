@@ -1,7 +1,8 @@
+require('dotenv').config(); 
+const db = require('./db');
+
 const express = require('express');
-
 const cors = require('cors');
-
 const app = express();
 
 app.use(cors());
@@ -11,7 +12,7 @@ app.get('/', (req, res) => {
     res.send("Selamat datang! Gudang belakang layar SEAPEDIA sudah aktif!");
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000; 
 app.listen(PORT, () => {
     console.log(`Mesin sudah menyala dan berjaga di pintu nomor ${PORT}`);
 });

@@ -132,8 +132,6 @@ router.post('/checkout', verifyToken, async (req, res) => {
     }
 });
 
-module.exports = router;
-
 // ==================== SELLER PROCESS ORDER ====================
 router.put('/:id/process', verifyToken, async (req, res) => {
     const orderId = req.params.id;
@@ -178,3 +176,75 @@ router.put('/:id/process', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Terjadi kesalahan sistem saat memproses status pesanan.' });
     }
 });
+
+// ==================== SYSTEM SLA AUTO-CANCELLATION & SIMULATION ====================
+router.post('/sla/simulate-cancel', verifyToken, async (req, res) => {
+    try {
+        await db.query('BEGIN');
+
+        const checkOverdueQuery = `
+            SELECT * FROM orders 
+            WHERE status = 'Sedang Dikemas' 
+              AND created_at < NOW() - INTERVAL '1 minute'
+        `;
+        const overdueOrders = await db.query(checkOverdueQuery);
+
+        if (overdueOrders.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(200).json({ message: 'Tidak ada pesanan yang melanggar batas waktu SLA saat ini.' });
+        }
+
+        const canceledOrdersLog = [];
+
+        for (const order of overdueOrders.rows) {
+            const orderId = order.id;
+            const buyerId = order.user_id;
+            const refundAmount = parseFloat(order.total_price);
+            const finalStatus = 'Dikembalikan';
+
+            await db.query('UPDATE orders SET status = $1 WHERE id = $2', [finalStatus, orderId]);
+
+            await db.query(
+                'INSERT INTO order_status_histories (order_id, status) VALUES ($1, $2)',
+                [orderId, finalStatus]
+            );
+
+            const walletCheck = await db.query('SELECT * FROM wallets WHERE user_id = $1', [buyerId]);
+            if (walletCheck.rows.length > 0) {
+                const walletId = walletCheck.rows[0].id;
+                await db.query('UPDATE wallets SET balance = balance + $1 WHERE id = $2', [refundAmount, walletId]);
+                await db.query(
+                    "INSERT INTO wallet_histories (wallet_id, amount, type, description) VALUES ($1, $2, 'In', $3)",
+                    [walletId, refundAmount, `Refund otomatis pembatalan SLA pesanan #${orderId}`]
+                );
+            }
+
+            const cartItems = await db.query('SELECT * FROM carts WHERE user_id = $1', [buyerId]);
+            for (const item of cartItems.rows) {
+                await db.query('UPDATE products SET stock = stock + $1 WHERE id = $2', [item.quantity, item.product_id]);
+            }
+
+            canceledOrdersLog.push({
+                order_id: orderId,
+                buyer_id: buyerId,
+                refunded_amount: refundAmount,
+                status: finalStatus
+            });
+        }
+
+        await db.query('COMMIT');
+
+        res.status(200).json({
+            message: 'Simulasi SLA berhasil dijalankan! Pesanan kedalwarsa berhasil dibatalkan otomatis.',
+            processed_orders_count: canceledOrdersLog.length,
+            canceled_details: canceledOrdersLog
+        });
+
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error(error);
+        res.status(500).json({ message: 'Terjadi kesalahan sistem saat menjalankan simulasi SLA.' });
+    }
+});
+
+module.exports = router;

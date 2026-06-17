@@ -18,6 +18,7 @@ app.use('/api/stores', require('./routes/storeRoutes'));
 app.use('/api/wallets', require('./routes/walletRoutes'));
 app.use('/api/addresses', require('./routes/addressRoutes')); 
 app.use('/api/carts', require('./routes/cartRoutes'));
+app.use('/api/orders', require('./routes/orderRoutes'));
 app.get('/', (req, res) => {
     res.send("Selamat datang! Gudang belakang layar SEAPEDIA sudah aktif!");
 });

@@ -11,8 +11,9 @@ const productRoutes = require('./routes/productRoutes');
 app.use(cors());
 app.use(express.json());
 
-app.use('/api/users', userRoutes);
-app.use('/api/products', productRoutes); 
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/products', require('./routes/productRoutes'));
+app.use('/api/reviews', require('./routes/reviewRoutes')); 
 app.get('/', (req, res) => {
     res.send("Selamat datang! Gudang belakang layar SEAPEDIA sudah aktif!");
 });
